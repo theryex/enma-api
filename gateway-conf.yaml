@@ -1,6 +1,5 @@
----
 models:
-  distilgpt2:
-    author: huggingface
-    description: DistilGPT2
-    url: http://0.0.0.0:8080/completion
+  lotus-12b:
+    author: Haru
+    description: lotus-12b
+    url: http://0.0.0.0:8888/completion

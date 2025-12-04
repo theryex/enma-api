@@ -38,7 +38,7 @@ app.add_middleware(
 
 
 args = {
-    "model_path": os.getenv("INFERENCE_MODEL", "./models/lotus-12B"),
+    "model_path": os.getenv("INFERENCE_MODEL", "./models/lotus-12B-fixed"),
     "port": int(os.getenv("INFERENCE_PORT", 8888))
 }
 
@@ -67,7 +67,8 @@ print("Loading model onto GPU 2 with 4-bit quantization...")
 model_for_pipeline = AutoModelForCausalLM.from_pretrained(
     args['model_path'],
     quantization_config=quantization_config, 
-    device_map="cuda:2"                      
+    device_map="cuda:2",
+    use_safetensors=True                      
 )
 
 print("Creating text-generation pipeline...")
