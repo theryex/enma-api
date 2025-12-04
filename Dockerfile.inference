@@ -1,10 +1,6 @@
-FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 
 WORKDIR /app
-
-# Upgrade build tools and install Cython<3.0 to fix PyYAML build issues
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir "Cython<3.0"
 
 COPY requirements/inference.txt .
 RUN pip install --no-cache-dir -r inference.txt
