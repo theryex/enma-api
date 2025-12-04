@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.inference
+    volumes:
+      - ./models:/app/models
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      - INFERENCE_PORT=${INFERENCE_PORT:-8888}
+      - INFERENCE_MODEL=${INFERENCE_MODEL:-./models/lotus-12B}
+      - QUANTIZATION=${QUANTIZATION:-4bit}
+      - USE_SAFETENSORS=${USE_SAFETENSORS:-FALSE}
+      - DEVICE_MAP=${DEVICE_MAP:-auto}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - enma-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "${GATEWAY_PORT:-9009}:9009"
+    environment:
+      - GATEWAY_PORT=9009
+      - INFERENCE_URL=http://inference:${INFERENCE_PORT:-8888}/completion
+      - INFERENCE_MODEL_NAME=${INFERENCE_MODEL_NAME:-Lotus-12B}
+      - INFERENCE_AUTHOR=${INFERENCE_AUTHOR:-Unknown}
+      - INFERENCE_DESCRIPTION=${INFERENCE_DESCRIPTION:-Hosted Model}
+    depends_on:
+      - inference
+    networks:
+      - enma-net
+
+volumes:
+  hf_cache:
+
+networks:
+  enma-net:
+    driver: bridge
