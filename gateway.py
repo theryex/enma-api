@@ -38,7 +38,8 @@ config = {}
 if config_mode == "env":
     print("Running in Environment Variable Mode (Single Model)")
     # Construct a config-like structure for compatibility
-    model_key = args["inference_model_name"]
+    # Force lowercase for the key to ensure case-insensitive matching
+    model_key = args["inference_model_name"].lower()
     config = {
         "models": {
             model_key: {
@@ -53,6 +54,9 @@ else:
     if os.path.exists(args["config"]):
         with open(args["config"], "r") as f:
             config = yaml.safe_load(f)
+            # Ensure keys from yaml are treated consistently (optional, but good practice if we enforce lowercase)
+            # For backward compatibility, we'll assume the yaml is correct as-is, or we could lower() keys here too.
+            # Let's keep file mode behavior close to original unless needed.
     else:
         print(f"Warning: Config file {args['config']} not found and env vars not set. Gateway may malfunction.")
         config = {"models": {}}
@@ -72,19 +76,21 @@ async def engines():
 async def completion(completion: Completion):
     if completion.engine is None:
         # If running in single-model env mode, we can default to the only available model
-        # if the user didn't specify one, or strictly require it.
-        # Given the existing code raised Exception, let's keep strictness or be helpful?
-        # Let's be helpful in env mode if there is only one model.
         if config_mode == "env" and len(config["models"]) == 1:
             completion.engine = list(config["models"].keys())[0]
         else:
             raise Exception("Engine not specified")
 
-    if completion.engine not in config["models"]:
+    # Normalize requested engine name to lowercase for lookup
+    requested_engine = completion.engine.lower()
+
+    if requested_engine not in config["models"]:
          raise Exception(f"Engine '{completion.engine}' not found")
 
-    engine_endpoint = config["models"][completion.engine]["url"]
+    engine_endpoint = config["models"][requested_engine]["url"]
     async with aiohttp.ClientSession() as session:
+        # Pass the original completion object (which might preserve the original case if that matters downstream,
+        # though usually it doesn't).
         async with session.post(engine_endpoint, json=completion.dict()) as resp:
             return await resp.json()
 

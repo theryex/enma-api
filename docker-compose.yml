@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile.inference
     volumes:
-      - ./models:/app/models
+      - /mnt/ai/enma-api/models/:/app/models
       - hf_cache:/root/.cache/huggingface
     environment:
       - INFERENCE_PORT=${INFERENCE_PORT:-8888}
