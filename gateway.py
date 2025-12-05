@@ -54,9 +54,7 @@ else:
     if os.path.exists(args["config"]):
         with open(args["config"], "r") as f:
             config = yaml.safe_load(f)
-            # Ensure keys from yaml are treated consistently (optional, but good practice if we enforce lowercase)
-            # For backward compatibility, we'll assume the yaml is correct as-is, or we could lower() keys here too.
-            # Let's keep file mode behavior close to original unless needed.
+
     else:
         print(f"Warning: Config file {args['config']} not found and env vars not set. Gateway may malfunction.")
         config = {"models": {}}
@@ -90,7 +88,6 @@ async def completion(completion: Completion):
     engine_endpoint = config["models"][requested_engine]["url"]
     async with aiohttp.ClientSession() as session:
         # Pass the original completion object (which might preserve the original case if that matters downstream,
-        # though usually it doesn't).
         async with session.post(engine_endpoint, json=completion.dict()) as resp:
             return await resp.json()
 
