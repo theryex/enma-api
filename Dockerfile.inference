@@ -1,12 +1,18 @@
-ARG CUDA_RELEASE=11.6.2-cudnn8-devel-ubuntu20.04
-FROM nvidia/cuda:${CUDA_RELEASE} AS base
-ENV DEBIAN_FRONTEND=noninteractive
-ADD . /root
-WORKDIR /root
+FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
 
-RUN apt update && apt upgrade -y && \
-    apt update && apt install -y python3 python3-pip && \
-    pip3 install --no-cache-dir --upgrade pip && \
-    pip3 install --no-cache-dir -r /root/requirements/inference.txt
+WORKDIR /app
 
-CMD ["python3", "/root/inference.py"]
+# Upgrade build tools and install Cython<3.0 to fix PyYAML build issues
+# We install PyYAML separately with --no-build-isolation to ensure it uses the compatible Cython
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir "Cython<3.0" && \
+    pip install --no-cache-dir --no-build-isolation PyYAML==6.0.1
+
+COPY requirements/inference_v2.txt .
+# Install the rest of the requirements
+RUN pip install --no-cache-dir -r inference_v2.txt
+
+COPY inference.py .
+COPY models.py .
+
+CMD ["python", "inference.py"]

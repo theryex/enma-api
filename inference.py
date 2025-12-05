@@ -9,15 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, StoppingCriteria, StoppingCriteriaList
 from models import Completion
 
-
-
 class StopOnTokens(StoppingCriteria):
     def __init__(self, stop_ids: torch.LongTensor):
         super().__init__()
         self.stop_ids = stop_ids
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-
         if input_ids.shape[1] >= self.stop_ids.shape[1]:
             last_tokens = input_ids[0, -self.stop_ids.shape[1]:]
             if torch.equal(last_tokens, self.stop_ids[0]):
@@ -36,39 +33,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# Configuration from Environment Variables
 args = {
     "model_path": os.getenv("INFERENCE_MODEL", "./models/lotus-12B"),
-    "port": int(os.getenv("INFERENCE_PORT", 8888))
+    "port": int(os.getenv("INFERENCE_PORT", 8888)),
+    "quantization": os.getenv("QUANTIZATION", "4bit"),
+    "use_safetensors": os.getenv("USE_SAFETENSORS", "FALSE").upper() == "TRUE",
+    "device_map": os.getenv("DEVICE_MAP", "auto")
 }
 
 print("--- Configuration ---")
 print(f"Model Path: {args['model_path']}")
 print(f"Port: {args['port']}")
+print(f"Quantization: {args['quantization']}")
+print(f"Use Safetensors: {args['use_safetensors']}")
+print(f"Device Map: {args['device_map']}")
 print("---------------------")
 
+quantization_config = None
+load_kwargs = {
+    "device_map": args["device_map"],
+    "use_safetensors": args["use_safetensors"]
+}
 
+if args["quantization"].lower() == "4bit":
+    print("Creating 4-bit quantization config...")
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_type="nf4",
+    )
+    load_kwargs["quantization_config"] = quantization_config
 
-print("Creating 4-bit quantization config...")
+elif args["quantization"].lower() == "8bit":
+    print("Creating 8-bit quantization config...")
+    quantization_config = BitsAndBytesConfig(
+        load_in_8bit=True,
+    )
+    load_kwargs["quantization_config"] = quantization_config
 
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4", 
-)
+elif args["quantization"].lower() == "16bit":
+    print("Setting 16-bit float dtype...")
+    load_kwargs["torch_dtype"] = torch.float16
+
+elif args["quantization"].lower() == "none":
+    print("No quantization selected.")
+
+else:
+    print(f"Warning: Unknown quantization mode '{args['quantization']}'. Defaulting to None.")
+
 
 print("Loading tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(args['model_path'])
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "left"
+try:
+    tokenizer = AutoTokenizer.from_pretrained(args['model_path'])
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+except Exception as e:
+    print(f"Error loading tokenizer: {e}")
+    raise e
 
-print("Loading model onto GPU 2 with 4-bit quantization...")
+print(f"Loading model from {args['model_path']}...")
+try:
+    model_for_pipeline = AutoModelForCausalLM.from_pretrained(
+        args['model_path'],
+        **load_kwargs
+    )
+except Exception as e:
+    print(f"Error loading model: {e}")
+    raise e
 
-model_for_pipeline = AutoModelForCausalLM.from_pretrained(
-    args['model_path'],
-    quantization_config=quantization_config, 
-    device_map="cuda:2"                      
-)
 
 print("Creating text-generation pipeline...")
 
@@ -78,7 +111,6 @@ pipe = pipeline(
     tokenizer=tokenizer
 )
 print("Model loaded successfully.")
-
 
 
 @app.post("/completion")
@@ -119,7 +151,6 @@ async def completion(completion_request: Completion):
         print(error_details)
         torch.cuda.empty_cache()
         return {"error": str(e), "details": error_details}
-
 
 
 if __name__ == "__main__":
